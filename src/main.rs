@@ -23,18 +23,32 @@ fn main() -> Result<()> {
 
     let mut total = 0;
     let start = Instant::now();
-    for file_info in FileTraverser::traverse(&args.paths, extensions)? {
-        let file_info = file_info?;
 
-        let loc = BufReader::new(file_info.file)
-            .lines()
-            .count();
-        total += loc;
+    let (files, dirs) = args.paths.into_iter()
+        .partition::<Vec<_>, _>(|p| p.is_file());
 
-        writeln!(handle, "{}\t{}", file_info.path.display(), loc)?;
+    for file_path in files {
+        write_info(&mut handle, File::open(&file_path)?, &file_path, &mut total)?;
     }
+
+    if !dirs.is_empty() {
+        for file_info in FileTraverser::traverse(&dirs, extensions)? {
+            let file_info = file_info?;
+            write_info(&mut handle, file_info.file, &file_info.path, &mut total)?;
+        }
+    }
+
     let elapsed = start.elapsed().as_millis();
     writeln!(handle, "Total: {}. Completed in {} ms.", total, elapsed)
+}
+
+fn write_info(out: &mut impl Write, file: File, path: &Path, total: &mut usize) -> Result<()> {
+    let loc = BufReader::new(file)
+        .lines()
+        .count();
+    *total += loc;
+
+    writeln!(out, "{}\t{}", path.display(), loc)
 }
 
 
@@ -46,9 +60,10 @@ struct FileTraverser<'a, T> {
 }
 
 impl<'a, T: AsRef<str>> FileTraverser<'a, T> {
-    fn traverse(starting_dirs: &[PathBuf], extensions: Option<&'a Vec<T>>) -> Result<Self> {
-        let sub_dirs = starting_dirs[1..].to_vec();
-        let traverser = read_dir(&starting_dirs[0])?;
+    // Panics if dirs is empty
+    fn traverse(dirs: &[PathBuf], extensions: Option<&'a Vec<T>>) -> Result<Self> {
+        let sub_dirs = dirs[1..].to_vec();
+        let traverser = read_dir(dirs.get(0).expect("Need at least one dir"))?;
         Ok(Self {
             extensions,
             sub_dirs,
