@@ -38,6 +38,7 @@ fn main() -> Result<()> {
 }
 
 
+#[derive(Debug)]
 struct FileTraverser<'a, T> {
     extensions: Option<&'a Vec<T>>,
     sub_dirs: Vec<PathBuf>,
@@ -94,7 +95,7 @@ impl<'a, T: AsRef<str>> Iterator for FileTraverser<'a, T> {
             };
 
             let file_info = self.map_entry(entry).transpose();
-            if let Some(_) = file_info {
+            if file_info.is_some() {
                 return file_info;
             }
         }
