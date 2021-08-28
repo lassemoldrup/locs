@@ -8,8 +8,8 @@ use clap::{AppSettings, Clap};
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "Lasse Møldrup <lasse.moeldrup@gmail.com>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Args {
-    #[clap(short, long, default_value = "./", about = "Sets the path to search")]
-    path: String,
+    #[clap(default_value = "./", about = "Sets the path(s) to search")]
+    paths: Vec<PathBuf>,
     #[clap(short, long, about = "Sets specific file extensions to search")]
     extensions: Option<Vec<String>>,
 }
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
 
     let mut total = 0;
     let start = Instant::now();
-    for file_info in FileTraverser::traverse(&args.path, extensions)? {
+    for file_info in FileTraverser::traverse(&args.paths, extensions)? {
         let file_info = file_info?;
 
         let loc = BufReader::new(file_info.file)
@@ -46,9 +46,9 @@ struct FileTraverser<'a, T> {
 }
 
 impl<'a, T: AsRef<str>> FileTraverser<'a, T> {
-    fn traverse(starting_dir: &str, extensions: Option<&'a Vec<T>>) -> Result<Self> {
-        let sub_dirs = vec![];
-        let traverser = read_dir(starting_dir)?;
+    fn traverse(starting_dirs: &[PathBuf], extensions: Option<&'a Vec<T>>) -> Result<Self> {
+        let sub_dirs = starting_dirs[1..].to_vec();
+        let traverser = read_dir(&starting_dirs[0])?;
         Ok(Self {
             extensions,
             sub_dirs,
@@ -59,23 +59,28 @@ impl<'a, T: AsRef<str>> FileTraverser<'a, T> {
     fn map_entry(&mut self, entry: Result<DirEntry>) -> Result<Option<FileInfo>> {
         let entry = entry?;
         let path = entry.path();
-        if entry.file_type()?.is_file() {
+        let file_type = entry.file_type()?;
+        if file_type.is_file() {
             match self.extensions {
-                Some(exts) => for ext in exts {
-                    if entry.file_name().to_string_lossy().ends_with(ext.as_ref()) {
-                        return File::open(&path)
-                            .map(|file| Some(FileInfo::new(file, &path)));
-                    }
+                Some(exts) => if has_ext(&entry, exts) {
+                    return File::open(&path)
+                        .map(|file| Some(FileInfo::new(file, &path)));
                 },
                 None => return File::open(&path)
                     .map(|file| Some(FileInfo::new(file, &path))),
             }
-        } else {
+        } else if file_type.is_dir() {
             self.sub_dirs.push(path);
         }
 
         Ok(None)
     }
+}
+
+fn has_ext(entry: &DirEntry, exts: &[impl AsRef<str>]) -> bool {
+    exts.iter().any(|ext| entry.file_name()
+        .to_string_lossy()
+        .ends_with(ext.as_ref()))
 }
 
 impl<'a, T: AsRef<str>> Iterator for FileTraverser<'a, T> {
