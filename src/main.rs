@@ -34,7 +34,7 @@ fn main() -> Result<()> {
         writeln!(handle, "{}\t{}", file_info.path.display(), loc)?;
     }
     let elapsed = start.elapsed().as_millis();
-    writeln!(handle, "Total: {}. Elapsed: {} ms.", total, elapsed)
+    writeln!(handle, "Total: {}. Completed in {} ms.", total, elapsed)
 }
 
 
